@@ -16664,7 +16664,9 @@
                 OFFICIAL_CABANG_LIST.forEach((cName, idx) => {
                     // Find ALL SCORs Assigned to this Cabang
                     const scorList = OFFICIAL_SCOR_SALES.filter(sc => SCOR_EXACT_BRANCH_MAP[sc] === cName);
-                    const scorAssignee = scorList.length > 0 ? scorList.map(s => toTitleCase(s)).join(', ') : OFFICIAL_SCOR_SALES[idx % OFFICIAL_SCOR_SALES.length];
+                    const scorAssignee = scorList.length > 0
+                        ? scorList.map(s => toTitleCase(s)).join(', ')
+                        : toTitleCase(OFFICIAL_SCOR_SALES[idx % OFFICIAL_SCOR_SALES.length]);
                     const appCount = branchAppCounts[cName] || 0;
                     const goLiveC = branchGoLiveCounts[cName] || 0;
                     const nominalVal = goLiveC * 216000000;
