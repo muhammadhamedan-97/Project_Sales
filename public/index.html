@@ -16029,6 +16029,9 @@
                         notif.style.display = 'flex';
                         if (notifText) notifText.innerText = `File "${file.name}" berhasil diunggah! ${excelGridRows.length} baris data ditampilkan di tabel.`;
                     }
+
+                    // Auto-refresh dashboard performance & filter periode
+                    renderPerformanceDashboard();
                 } catch (err) {
                     console.error('Gagal parse file:', err);
                     alert('Gagal membaca file. Pastikan file Excel (.xlsx/.xls) atau CSV yang valid.');
@@ -16136,8 +16139,7 @@
                 if (match && selectedPeriod !== 'all') {
                     const cell10 = (cells[10]?.textContent || '').trim();
                     const cell9 = (cells[9]?.textContent || '').trim();
-                    const mm = String(cell10 || cell9).match(/(Jan|Feb|Mar|Apr|May|Mei|Jun|Jul|Agu|Agt|Aug|Sep|Okt|Oct|Nov|Des|Dec)[a-z]*\s+(\d{4})/i);
-                    const periodKey = mm ? (PERF_MONTH_ABBR[mm[1].toUpperCase()] + '_' + mm[2]) : null;
+                    const periodKey = parseAnyDateToPeriodKey(cell10) || parseAnyDateToPeriodKey(cell9);
                     if (periodKey !== selectedPeriod) match = false;
                 }
 
@@ -16332,15 +16334,40 @@
             return monthName + '_' + m[3];
         }
 
+        function parseAnyDateToPeriodKey(rawVal) {
+            const raw = String(rawVal || '').trim();
+            if (!raw) return null;
+
+            // 1. Format "DD Mmm YYYY" (sudah ada bulan text, English/Indonesia)
+            const m1 = raw.match(/([A-Za-z]{3,})[\s\-.,]+(\d{4})/i);
+            if (m1) {
+                const monthName = PERF_MONTH_ABBR[m1[1].toUpperCase()];
+                if (monthName) return monthName + '_' + m1[2];
+            }
+
+            // 2. Excel serial number (integer besar)
+            const num = parseFloat(raw);
+            if (!isNaN(num) && num > 30000 && num < 60000 && raw === String(Math.round(num))) {
+                const d = new Date(Math.round((num - 25569) * 86400 * 1000));
+                if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+                    return PERF_MONTH_NAMES[d.getMonth()] + '_' + d.getFullYear();
+                }
+            }
+
+            // 3. ISO / slash / timestamp (2026-07-01, 01/07/2026, 2026-07-01T...)
+            const parsed = new Date(raw);
+            if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) {
+                return PERF_MONTH_NAMES[parsed.getMonth()] + '_' + parsed.getFullYear();
+            }
+
+            return null;
+        }
+
         function extractRowPeriodKey(r) {
             const candidates = [r && r[9], r && r[10]];
             for (let i = 0; i < candidates.length; i++) {
-                const raw = String(candidates[i] || '').trim();
-                const m = raw.match(/(Jan|Feb|Mar|Apr|May|Mei|Jun|Jul|Agu|Agt|Aug|Sep|Okt|Oct|Nov|Des|Dec)[a-z]*\s+(\d{4})/i);
-                if (m) {
-                    const monthName = PERF_MONTH_ABBR[m[1].toUpperCase()];
-                    if (monthName) return monthName + '_' + m[2];
-                }
+                const k = parseAnyDateToPeriodKey(candidates[i]);
+                if (k) return k;
             }
             return null;
         }
