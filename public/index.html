@@ -16071,12 +16071,22 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(excelGridRows)
                     }).then(r => r.json()).then(s => {
-                        if (notif && notifText) notifText.innerText += ` (Sync server: ${s.synced} baru, total ${s.total} baris)`;
-                    }).catch(() => {});
+                        console.log('[SYNC] Excel synced:', s);
+                        if (notif && notifText) {
+                            notifText.innerText = `File "${file.name}" berhasil! ${excelGridRows.length} baris di tabel. (Server: +${s.synced} baru, total ${s.total})`;
+                        }
+                    }).catch(err => {
+                        console.error('[SYNC] Gagal sync:', err);
+                        if (notif && notifText) {
+                            notifText.innerText = `File "${file.name}" berhasil diunggah! ${excelGridRows.length} baris (sync server gagal, coba refresh)`;
+                        }
+                    });
 
                     if (notif) {
                         notif.style.display = 'flex';
-                        if (notifText) notifText.innerText = `File "${file.name}" berhasil diunggah! ${excelGridRows.length} baris data ditampilkan di tabel.`;
+                        if (!notifText || !notifText.innerText.includes('File')) {
+                            notifText.innerText = `File "${file.name}" berhasil diunggah! ${excelGridRows.length} baris data ditampilkan di tabel.`;
+                        }
                     }
 
                     // Auto-refresh dashboard performance & filter periode

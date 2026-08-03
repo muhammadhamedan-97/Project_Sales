@@ -283,30 +283,39 @@ app.post('/api/records', async (req, res) => {
 
 // ============ EXCEL DATA SYNC ============
 app.get('/api/excel', (req, res) => {
-    res.json(loadExcelData());
+    const data = loadExcelData();
+    console.log(`[EXCEL] GET — mengirim ${data.length} baris`);
+    res.json(data);
 });
 
 // POST /api/excel/sync — merge data dari device manapun. Hanya tambah row baru (identifikasi via kolom 3: order No Confins)
 app.post('/api/excel/sync', (req, res) => {
-    const incoming = Array.isArray(req.body) ? req.body : [];
-    if (incoming.length === 0) return res.status(400).json({ error: 'Tidak ada data' });
+    try {
+        const incoming = Array.isArray(req.body) ? req.body : [];
+        console.log(`[EXCEL] POST /sync — menerima ${incoming.length} baris`);
+        if (incoming.length === 0) return res.status(400).json({ error: 'Tidak ada data' });
 
-    const serverRows = loadExcelData();
-    const existingKeys = new Set(serverRows.map(r => String(r && r[3] || '').trim().toLowerCase()));
-    let added = 0;
+        const serverRows = loadExcelData();
+        const existingKeys = new Set(serverRows.map(r => String(r && r[3] || '').trim().toLowerCase()));
+        let added = 0;
 
-    incoming.forEach(row => {
-        if (!row || !Array.isArray(row)) return;
-        const key = String(row[3] || '').trim().toLowerCase();
-        if (key && !existingKeys.has(key)) {
-            serverRows.push(row);
-            existingKeys.add(key);
-            added++;
-        }
-    });
+        incoming.forEach(row => {
+            if (!row || !Array.isArray(row)) return;
+            const key = String(row[3] || '').trim().toLowerCase();
+            if (key && !existingKeys.has(key)) {
+                serverRows.push(row);
+                existingKeys.add(key);
+                added++;
+            }
+        });
 
-    saveExcelData(serverRows);
-    res.json({ synced: added, total: serverRows.length });
+        saveExcelData(serverRows);
+        console.log(`[EXCEL] POST /sync — ditambahkan ${added} baru, total ${serverRows.length} baris`);
+        res.json({ synced: added, total: serverRows.length });
+    } catch (err) {
+        console.error(`[EXCEL] ERROR: ${err.message}`);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 if (require.main === module) {
