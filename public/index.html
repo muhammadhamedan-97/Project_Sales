@@ -1113,7 +1113,7 @@
             height: 24px;
         }
 
-        /* Freeze Pane: hanya kolom No (index 1) */
+        /* Freeze Panes: kolom No → Cabang → Customer */
         .excel-table th:nth-child(1) {
             position: sticky;
             left: 0;
@@ -1122,7 +1122,6 @@
             min-width: 45px;
             text-align: center;
         }
-
         .excel-table td:nth-child(1) {
             position: sticky;
             left: 0;
@@ -1130,12 +1129,44 @@
             text-align: center;
             color: #475569;
             z-index: 15;
-            border-right: 2px solid #107c41;
-            box-shadow: 2px 0 6px rgba(0, 0, 0, 0.06);
             font-weight: 400 !important;
         }
 
-        .excel-table tr:hover td:nth-child(1) {
+        .excel-table th:nth-child(2) {
+            position: sticky;
+            left: 45px;
+            z-index: 25;
+            background: #0d6535;
+            min-width: 130px;
+        }
+        .excel-table td:nth-child(2) {
+            position: sticky;
+            left: 45px;
+            background: #ffffff;
+            z-index: 15;
+            font-weight: 400 !important;
+        }
+
+        .excel-table th:nth-child(3) {
+            position: sticky;
+            left: 175px;
+            z-index: 25;
+            background: #0d6535;
+            min-width: 160px;
+            border-right: 2px solid #107c41;
+        }
+        .excel-table td:nth-child(3) {
+            position: sticky;
+            left: 175px;
+            background: #ffffff;
+            z-index: 15;
+            font-weight: 400 !important;
+            border-right: 2px solid #107c41;
+        }
+
+        .excel-table tr:hover td:nth-child(1),
+        .excel-table tr:hover td:nth-child(2),
+        .excel-table tr:hover td:nth-child(3) {
             background: #e8f5e9 !important;
         }
 
@@ -1208,20 +1239,19 @@
             }
         }
 
-        /* HP: nonaktifkan freeze panes kiri (No) agar tabel bisa digeser horizontal dengan normal */
+        /* HP: nonaktifkan freeze panes kiri agar tabel bisa digeser horizontal dengan normal */
         @media (max-width: 768px) {
-            .excel-table th:nth-child(1) {
+            .excel-table th:nth-child(-n+3) {
                 position: sticky;
                 top: 0;
                 left: auto !important;
                 z-index: 10 !important;
-                box-shadow: none !important;
+                border-right: 1px solid #cbd5e1 !important;
             }
-            .excel-table td:nth-child(1) {
+            .excel-table td:nth-child(-n+3) {
                 position: static !important;
                 left: auto !important;
                 z-index: auto !important;
-                box-shadow: none !important;
                 border-right: 1px solid #cbd5e1 !important;
             }
         }
