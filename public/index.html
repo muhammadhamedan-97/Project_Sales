@@ -15852,6 +15852,32 @@
             }
         }
 
+        // Kolom tanggal: 9=order input, 10=Status Date, 15=survey date
+        const DATE_COLUMN_INDEXES = [9, 10, 15];
+
+        function formatDateCell(raw) {
+            const val = String(raw || '').trim();
+            if (!val) return '';
+
+            // Cek sudah format "DD Mmm YYYY" (contoh: "01 Jul 2026") — tidak usah diubah
+            if (/^\d{1,2}\s[A-Z][a-z]{2,8}\s\d{4}$/.test(val)) return val;
+
+            // Excel serial number (integer 30000-60000)
+            const num = parseFloat(val);
+            if (!isNaN(num) && num > 30000 && num < 60000 && val === String(num)) {
+                const d = new Date(Math.round((num - 25569) * 86400 * 1000));
+                return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+
+            // ISO / timestamp
+            const parsed = new Date(val);
+            if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) {
+                return parsed.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+
+            return val;
+        }
+
         function renderExcelGrid() {
             const tbody = document.getElementById('excelTableBody');
             if (!tbody) return;
@@ -15862,9 +15888,12 @@
             rowsToRender.forEach((row, rIdx) => {
                 const tr = document.createElement('tr');
                 let tds = `<td>${rIdx + 1}</td>`;
-                
+
                 for (let cIdx = 1; cIdx < EXCEL_COLUMNS.length; cIdx++) {
-                    const cellVal = row[cIdx] !== undefined ? row[cIdx] : '';
+                    let cellVal = row[cIdx] !== undefined ? row[cIdx] : '';
+                    if (DATE_COLUMN_INDEXES.includes(cIdx)) {
+                        cellVal = formatDateCell(cellVal);
+                    }
                     tds += `<td contenteditable="true" onblur="updateExcelCell(${rIdx}, ${cIdx}, this.innerText)">${cellVal}</td>`;
                 }
 
