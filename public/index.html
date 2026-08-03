@@ -835,6 +835,21 @@
                 top: 0;
                 z-index: 5;
             }
+
+            /* Agent table mobile: lebih compact */
+            .agent-table-wrap .crm-table {
+                min-width: 580px;
+                font-size: 0.72rem;
+            }
+            .agent-table-wrap .crm-table th,
+            .agent-table-wrap .crm-table td {
+                padding: 6px 5px;
+                font-size: 0.7rem;
+            }
+            .agent-table-wrap .crm-table thead th {
+                font-size: 0.65rem;
+                padding: 8px 5px;
+            }
         }
 
         /* Pagination controls */
@@ -2036,13 +2051,13 @@
                     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 14px; flex-wrap: wrap; gap: 12px;">
                         <div>
                             <span style="background: rgba(16, 124, 65, 0.1); color: #107c41; padding: 3px 10px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; margin-bottom: 4px;">
-                                <i class="fa-solid fa-users"></i> Performance Agen • Kolom 16 & 18
+                                <i class="fa-solid fa-users"></i> Performance Agen • Kolom 17 & 5
                             </span>
                             <h3 class="card-title" style="font-size: 1.15rem; color: #0f172a; font-weight: 800; display: flex; align-items: center; gap: 8px;">
                                 <i class="fa-solid fa-handshake-angle" style="color: #107c41; font-size: 1.25rem;"></i> Kontribusi Agen Potensial Pembiayaan (9 SCOR Executives)
                             </h3>
                             <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
-                                Data diambil dari <strong>9 SCOR Resmi</strong>, <strong>Kolom 16 (Sales Agen ID)</strong> — bila kosong/direct memakai <strong>Kolom 5 (Source App)</strong> — <strong>Kolom 1 (Cabang)</strong>, dan <strong>Kolom 18 (Status Category Go-Live)</strong>
+                                Data diambil dari <strong>9 SCOR Resmi</strong>, <strong>Kolom 17 (Nama Sales Agen)</strong> — fallback ke <strong>Kolom 5 (Source App)</strong> — <strong>Kolom 1 (Cabang)</strong>, dan <strong>Kolom 18 (Status Category Go-Live)</strong>
                             </p>
                         </div>
                         
@@ -2109,7 +2124,7 @@
                                     <th style="width: 70px; text-align: center; padding: 10px 6px;">Peringkat</th>
                                     <th style="padding: 10px 10px;">Nama SCOR / CMO</th>
                                     <th style="text-align: center; padding: 10px 6px;">Status</th>
-                                    <th style="padding: 10px 10px;">Nama Agent (Kolom 16)</th>
+                                    <th style="padding: 10px 10px;">Nama Agent (Kolom 17 & 5)</th>
                                     <th style="padding: 10px 10px;">Cabang</th>
                                     <th style="text-align: center; color: #b91c1c; padding: 10px 6px;"><i class="fa-solid fa-circle-check"></i> Go Live</th>
                                     <th style="text-align: center; color: #1d4ed8; padding: 10px 6px;"><i class="fa-solid fa-file-invoice"></i> Aplikasi</th>
@@ -16967,13 +16982,25 @@
 
             (matrixSourceRows || []).forEach(r => {
                 const cmo = (r[8] || '').trim().toUpperCase();
-                const salesAgenRaw = (r[16] || '').trim();
+                const salesAgenId = (r[16] || '').trim();
+                const salesAgenName = (r[17] || '').trim();
                 const branch = (r[1] || r[2] || 'Bekasi').trim();
                 const col18 = (r[18] || r[11] || '').trim().toLowerCase();
-                const sourceAppRaw = (r[5] || '').trim().toUpperCase();
-                let cleanAgent = (salesAgenRaw && salesAgenRaw !== '-') ? salesAgenRaw.split('-')[0].trim().toUpperCase() : '';
-                if (!cleanAgent) {
-                    cleanAgent = (sourceAppRaw && sourceAppRaw !== '-' && sourceAppRaw !== 'SALES AGENT (SA)') ? sourceAppRaw : 'DIRECT SA';
+                const sourceAppRaw = (r[5] || '').trim();
+
+                // Nama agen: prioritas Nama Sales Agen (kolom 17) > Sales Agen ID (kolom 16) > Source App (kolom 5)
+                let cleanAgent = '';
+                const isValidName = (v) => v && v !== '-' && !/^\d+$/.test(v) && v.length > 1;
+                if (isValidName(salesAgenName)) {
+                    cleanAgent = salesAgenName.toUpperCase();
+                } else if (isValidName(salesAgenId)) {
+                    cleanAgent = salesAgenId.split('-')[0].trim().toUpperCase();
+                }
+                if (!cleanAgent && sourceAppRaw && sourceAppRaw !== '-' && sourceAppRaw.toUpperCase() !== 'SALES AGENT (SA)' && !/^\d+$/.test(sourceAppRaw)) {
+                    cleanAgent = sourceAppRaw.toUpperCase();
+                }
+                if (!cleanAgent || cleanAgent === '0') {
+                    cleanAgent = 'DIRECT SA';
                 }
 
                 OFFICIAL_SCOR_SALES.forEach(sc => {
