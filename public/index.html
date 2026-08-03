@@ -16662,8 +16662,9 @@
             if (bBody) {
                 bBody.innerHTML = '';
                 OFFICIAL_CABANG_LIST.forEach((cName, idx) => {
-                    // Find SCOR Assigned to this Cabang
-                    const scorAssignee = OFFICIAL_SCOR_SALES.find(sc => SCOR_EXACT_BRANCH_MAP[sc] === cName) || OFFICIAL_SCOR_SALES[idx % OFFICIAL_SCOR_SALES.length];
+                    // Find ALL SCORs Assigned to this Cabang
+                    const scorList = OFFICIAL_SCOR_SALES.filter(sc => SCOR_EXACT_BRANCH_MAP[sc] === cName);
+                    const scorAssignee = scorList.length > 0 ? scorList.map(s => toTitleCase(s)).join(', ') : OFFICIAL_SCOR_SALES[idx % OFFICIAL_SCOR_SALES.length];
                     const appCount = branchAppCounts[cName] || 0;
                     const goLiveC = branchGoLiveCounts[cName] || 0;
                     const nominalVal = goLiveC * 216000000;
