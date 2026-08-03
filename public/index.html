@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (XLSX) for Excel parsing -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 
     <style>
         :root {
@@ -1743,9 +1745,10 @@
                         <button class="btn-demo" style="background: #475569; color: #ffffff; border: none; padding: 6px 12px; font-size: 0.8rem; font-weight: 700;" onclick="goBackPreviousTab()">
                             <i class="fa-solid fa-arrow-left"></i> Kembali (Back)
                         </button>
-                        <button class="btn-demo" style="background: #107c41; color: #ffffff; border: none; padding: 6px 12px; font-size: 0.8rem;" onclick="addExcelRow()">
-                            <i class="fa-solid fa-plus"></i> Tambah Baris
+                        <button class="btn-demo" style="background: #107c41; color: #ffffff; border: none; padding: 6px 12px; font-size: 0.8rem;" onclick="document.getElementById('excelFileUpload').click()">
+                            <i class="fa-solid fa-upload"></i> Upload Data
                         </button>
+                        <input type="file" id="excelFileUpload" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelFileUpload(event)">
                         <button class="btn-demo" style="background: #0284c7; color: #ffffff; border: none; padding: 6px 12px; font-size: 0.8rem;" onclick="exportExcelGridCSV()">
                             <i class="fa-solid fa-file-csv"></i> Export Excel (25 Kolom)
                         </button>
@@ -15932,24 +15935,77 @@
             localStorage.setItem('crm_excel_rows', JSON.stringify(excelGridRows));
         }
 
-        function addExcelRow() {
-            if (!excelGridRows || excelGridRows.length === 0) {
-                excelGridRows = JSON.parse(JSON.stringify(REAL_EXCEL_INITIAL_ROWS));
-            }
-            const newRow = new Array(EXCEL_COLUMNS.length).fill('');
-            newRow[0] = excelGridRows.length + 1;
-            newRow[1] = 'APP-' + (1000 + excelGridRows.length + 1);
-            newRow[2] = new Date().toLocaleDateString('id-ID');
-            excelGridRows.push(newRow);
-            localStorage.setItem('crm_excel_rows', JSON.stringify(excelGridRows));
-            renderExcelGrid();
+        function handleExcelFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
 
             const notif = document.getElementById('excelAddNotification');
-            if (notif) {
-                notif.style.display = 'flex';
-                const notifText = document.getElementById('excelAddNotifText');
-                if (notifText) notifText.innerText = `Baris data aplikasi baru (#${excelGridRows.length}) berhasil ditambahkan! Anda dapat mengedit sel atau klik Menu Kembali.`;
-            }
+            const notifText = document.getElementById('excelAddNotifText');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.SheetNames[0];
+                    const sheet = workbook.Sheets[firstSheet];
+                    const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false });
+
+                    if (!rawRows || rawRows.length === 0) {
+                        alert('File kosong atau tidak valid.');
+                        return;
+                    }
+
+                    const headerRow = rawRows[0] || [];
+                    const isHeader = headerRow.some(cell => {
+                        const v = String(cell || '').toLowerCase().trim();
+                        return EXCEL_COLUMNS.some(col => v.includes(col.toLowerCase()) || col.toLowerCase().includes(v));
+                    });
+
+                    const dataRows = isHeader ? rawRows.slice(1) : rawRows;
+                    const headers = isHeader ? headerRow : [];
+                    const colMap = [];
+
+                    for (let tIdx = 0; tIdx < EXCEL_COLUMNS.length; tIdx++) {
+                        const targetCol = EXCEL_COLUMNS[tIdx].toLowerCase().trim();
+                        if (isHeader) {
+                            const foundIdx = headers.findIndex(h => {
+                                const hv = String(h || '').toLowerCase().trim();
+                                return hv === targetCol || hv.includes(targetCol) || targetCol.includes(hv);
+                            });
+                            colMap.push(foundIdx >= 0 ? foundIdx : -1);
+                        } else {
+                            colMap.push(tIdx < (rawRows[0] || []).length ? tIdx : -1);
+                        }
+                    }
+
+                    excelGridRows = [];
+                    dataRows.forEach((row, rIdx) => {
+                        if (!row || row.every(cell => String(cell || '').trim() === '')) return;
+                        const mapped = new Array(EXCEL_COLUMNS.length).fill('');
+                        mapped[0] = excelGridRows.length + 1;
+                        for (let cIdx = 1; cIdx < EXCEL_COLUMNS.length; cIdx++) {
+                            const srcIdx = colMap[cIdx];
+                            if (srcIdx >= 0 && srcIdx < row.length) {
+                                mapped[cIdx] = row[srcIdx] !== undefined && row[srcIdx] !== null ? String(row[srcIdx]).trim() : '';
+                            }
+                        }
+                        excelGridRows.push(mapped);
+                    });
+
+                    localStorage.setItem('crm_excel_rows', JSON.stringify(excelGridRows));
+                    renderExcelGrid();
+
+                    if (notif) {
+                        notif.style.display = 'flex';
+                        if (notifText) notifText.innerText = `File "${file.name}" berhasil diunggah! ${excelGridRows.length} baris data ditampilkan di tabel.`;
+                    }
+                } catch (err) {
+                    console.error('Gagal parse file:', err);
+                    alert('Gagal membaca file. Pastikan file Excel (.xlsx/.xls) atau CSV yang valid.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         function syncVisitToExcel() {
