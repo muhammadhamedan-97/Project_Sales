@@ -15988,24 +15988,29 @@
                     }
 
                     const headerRow = rawRows[0] || [];
-                    const isHeader = headerRow.some(cell => {
-                        const v = String(cell || '').toLowerCase().trim();
-                        return EXCEL_COLUMNS.some(col => v.includes(col.toLowerCase()) || col.toLowerCase().includes(v));
+                    const headersClean = headerRow.map(h => String(h || '').toLowerCase().trim());
+                    const isHeader = headersClean.some(hv => {
+                        if (!hv || hv.length < 2) return false;
+                        return EXCEL_COLUMNS.some(col => {
+                            const cv = col.toLowerCase().trim();
+                            return hv === cv || (hv.length > 3 && cv.length > 3 && (hv.includes(cv) || cv.includes(hv)));
+                        });
                     });
 
                     const dataRows = isHeader ? rawRows.slice(1) : rawRows;
-                    const headers = isHeader ? headerRow : [];
                     const colMap = [];
 
-                    for (let tIdx = 0; tIdx < EXCEL_COLUMNS.length; tIdx++) {
-                        const targetCol = EXCEL_COLUMNS[tIdx].toLowerCase().trim();
-                        if (isHeader) {
-                            const foundIdx = headers.findIndex(h => {
-                                const hv = String(h || '').toLowerCase().trim();
-                                return hv === targetCol || hv.includes(targetCol) || targetCol.includes(hv);
-                            });
+                    if (isHeader) {
+                        for (let tIdx = 0; tIdx < EXCEL_COLUMNS.length; tIdx++) {
+                            const targetCol = EXCEL_COLUMNS[tIdx].toLowerCase().trim();
+                            let foundIdx = headersClean.findIndex(hv => hv === targetCol);
+                            if (foundIdx < 0 && targetCol.length > 3) {
+                                foundIdx = headersClean.findIndex(hv => hv.length > 3 && (hv.includes(targetCol) || targetCol.includes(hv)));
+                            }
                             colMap.push(foundIdx >= 0 ? foundIdx : -1);
-                        } else {
+                        }
+                    } else {
+                        for (let tIdx = 0; tIdx < EXCEL_COLUMNS.length; tIdx++) {
                             colMap.push(tIdx < (rawRows[0] || []).length ? tIdx : -1);
                         }
                     }
