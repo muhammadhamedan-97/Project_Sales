@@ -6,6 +6,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'records.json');
+const EXCEL_FILE = path.join(__dirname, 'data', 'excel.json');
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -24,6 +25,18 @@ function loadRecords() {
 function saveRecords(records) {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(records, null, 2), 'utf8');
+}
+
+function loadExcelData() {
+    try {
+        const data = JSON.parse(fs.readFileSync(EXCEL_FILE, 'utf8'));
+        return Array.isArray(data) ? data : [];
+    } catch { return []; }
+}
+
+function saveExcelData(data) {
+    fs.mkdirSync(path.dirname(EXCEL_FILE), { recursive: true });
+    fs.writeFileSync(EXCEL_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
 // ============ GEMINI AI ============
@@ -266,6 +279,34 @@ app.post('/api/records', async (req, res) => {
     saveRecords(records);
 
     res.status(201).json(record);
+});
+
+// ============ EXCEL DATA SYNC ============
+app.get('/api/excel', (req, res) => {
+    res.json(loadExcelData());
+});
+
+// POST /api/excel/sync — merge data dari device manapun. Hanya tambah row baru (identifikasi via kolom 3: order No Confins)
+app.post('/api/excel/sync', (req, res) => {
+    const incoming = Array.isArray(req.body) ? req.body : [];
+    if (incoming.length === 0) return res.status(400).json({ error: 'Tidak ada data' });
+
+    const serverRows = loadExcelData();
+    const existingKeys = new Set(serverRows.map(r => String(r && r[3] || '').trim().toLowerCase()));
+    let added = 0;
+
+    incoming.forEach(row => {
+        if (!row || !Array.isArray(row)) return;
+        const key = String(row[3] || '').trim().toLowerCase();
+        if (key && !existingKeys.has(key)) {
+            serverRows.push(row);
+            existingKeys.add(key);
+            added++;
+        }
+    });
+
+    saveExcelData(serverRows);
+    res.json({ synced: added, total: serverRows.length });
 });
 
 if (require.main === module) {

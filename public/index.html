@@ -15802,6 +15802,39 @@
                     renderScorPodium();
                 })
                 .catch(() => {});
+
+            // Sinkron data Excel dengan server (excel.json)
+            fetch('/api/excel', { cache: 'no-store' })
+                .then(res => res.ok ? res.json() : [])
+                .then(serverExcel => {
+                    if (Array.isArray(serverExcel) && serverExcel.length > 0) {
+                        const localRows = JSON.parse(localStorage.getItem('crm_excel_rows') || '[]');
+                        const merged = [...serverExcel];
+                        const existingKeys = new Set(merged.map(r => String(r && r[3] || '').trim().toLowerCase()));
+                        localRows.forEach(r => {
+                            const key = String(r && r[3] || '').trim().toLowerCase();
+                            if (key && !existingKeys.has(key)) {
+                                merged.push(r);
+                                existingKeys.add(key);
+                            }
+                        });
+                        excelGridRows = merged;
+                        localStorage.setItem('crm_excel_rows', JSON.stringify(excelGridRows));
+                        renderExcelGrid();
+                        // Sync balik data baru ke server
+                        fetch('/api/excel/sync', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(excelGridRows)
+                        }).catch(() => {});
+                    } else if (!excelGridRows || excelGridRows.length === 0) {
+                        // fallback ke hardcoded
+                        excelGridRows = JSON.parse(JSON.stringify(REAL_EXCEL_INITIAL_ROWS));
+                        localStorage.setItem('crm_excel_rows', JSON.stringify(excelGridRows));
+                        renderExcelGrid();
+                    }
+                })
+                .catch(() => {});
         });
 
         let excelSort = { col: 0, dir: 1 };
@@ -16031,6 +16064,15 @@
 
                     localStorage.setItem('crm_excel_rows', JSON.stringify(excelGridRows));
                     renderExcelGrid();
+
+                    // Sync data Excel ke server
+                    fetch('/api/excel/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(excelGridRows)
+                    }).then(r => r.json()).then(s => {
+                        if (notif && notifText) notifText.innerText += ` (Sync server: ${s.synced} baru, total ${s.total} baris)`;
+                    }).catch(() => {});
 
                     if (notif) {
                         notif.style.display = 'flex';
