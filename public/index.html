@@ -16136,7 +16136,7 @@
                 if (match && selectedPeriod !== 'all') {
                     const cell10 = (cells[10]?.textContent || '').trim();
                     const cell9 = (cells[9]?.textContent || '').trim();
-                    const mm = String(cell10 || cell9).match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i);
+                    const mm = String(cell10 || cell9).match(/(Jan|Feb|Mar|Apr|May|Mei|Jun|Jul|Agu|Agt|Aug|Sep|Okt|Oct|Nov|Des|Dec)[a-z]*\s+(\d{4})/i);
                     const periodKey = mm ? (PERF_MONTH_ABBR[mm[1].toUpperCase()] + '_' + mm[2]) : null;
                     if (periodKey !== selectedPeriod) match = false;
                 }
@@ -16312,8 +16312,8 @@
         };
 
         const PERF_MONTH_ORDER = { 'JANUARI':1, 'FEBRUARI':2, 'MARET':3, 'APRIL':4, 'MEI':5, 'JUNI':6, 'JULI':7, 'AGUSTUS':8, 'SEPTEMBER':9, 'OKTOBER':10, 'NOVEMBER':11, 'DESEMBER':12 };
-        const PERF_MONTH_ABBR = { 'JAN':'JANUARI', 'FEB':'FEBRUARI', 'MAR':'MARET', 'APR':'APRIL', 'MAY':'MEI', 'JUN':'JUNI', 'JUL':'JULI', 'AUG':'AGUSTUS', 'SEP':'SEPTEMBER', 'OCT':'OKTOBER', 'NOV':'NOVEMBER', 'DEC':'DESEMBER' };
-        const VISIT_MONTH_ABBR = { 'jan':'JANUARI', 'feb':'FEBRUARI', 'mar':'MARET', 'apr':'APRIL', 'mei':'MEI', 'jun':'JUNI', 'jul':'JULI', 'agu':'AGUSTUS', 'sep':'SEPTEMBER', 'okt':'OKTOBER', 'nov':'NOVEMBER', 'des':'DESEMBER' };
+        const PERF_MONTH_ABBR = { 'JAN':'JANUARI', 'FEB':'FEBRUARI', 'MAR':'MARET', 'APR':'APRIL', 'MAY':'MEI', 'JUN':'JUNI', 'JUL':'JULI', 'AGU':'AGUSTUS', 'AGT':'AGUSTUS', 'AUG':'AGUSTUS', 'SEP':'SEPTEMBER', 'OCT':'OKTOBER', 'OKT':'OKTOBER', 'NOV':'NOVEMBER', 'DEC':'DESEMBER', 'DES':'DESEMBER', 'MEI':'MEI' };
+        const VISIT_MONTH_ABBR = { 'jan':'JANUARI', 'feb':'FEBRUARI', 'mar':'MARET', 'apr':'APRIL', 'mei':'MEI', 'jun':'JUNI', 'jul':'JULI', 'agu':'AGUSTUS', 'agt':'AGUSTUS', 'sep':'SEPTEMBER', 'okt':'OKTOBER', 'nov':'NOVEMBER', 'des':'DESEMBER' };
         const PERF_MONTH_NAMES = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
 
         let perfPeriodTouched = false;
@@ -16336,7 +16336,7 @@
             const candidates = [r && r[9], r && r[10]];
             for (let i = 0; i < candidates.length; i++) {
                 const raw = String(candidates[i] || '').trim();
-                const m = raw.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i);
+                const m = raw.match(/(Jan|Feb|Mar|Apr|May|Mei|Jun|Jul|Agu|Agt|Aug|Sep|Okt|Oct|Nov|Des|Dec)[a-z]*\s+(\d{4})/i);
                 if (m) {
                     const monthName = PERF_MONTH_ABBR[m[1].toUpperCase()];
                     if (monthName) return monthName + '_' + m[2];
