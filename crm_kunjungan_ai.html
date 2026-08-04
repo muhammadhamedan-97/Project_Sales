@@ -15534,8 +15534,7 @@
                 .then(res => res.ok ? res.json() : [])
                 .then(serverRecords => {
                     if (!Array.isArray(serverRecords)) serverRecords = [];
-                    const isExcluded = (d) => /\b0?1\s*(Agu|Agt)\b|\b31\s*Jul\b/i.test(String(d || ''));
-                    visitRecords = serverRecords.filter(s => s && !isExcluded(s.date));
+                    visitRecords = serverRecords.filter(s => s && s.id);
                     localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
                     renderTable();
                     updateStats();

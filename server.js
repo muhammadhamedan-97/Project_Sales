@@ -8,6 +8,14 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'records.json');
 const EXCEL_FILE = path.join(__dirname, 'data', 'excel.json');
 
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -15,8 +23,7 @@ function loadRecords() {
     try {
         const records = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         if (!Array.isArray(records)) return [];
-        const isExcluded = (d) => /\b0?1\s*(Agu|Agt)\b|\b31\s*Jul\b/i.test(String(d || ''));
-        return records.filter(r => r && !isExcluded(r.date));
+        return records.filter(r => r && r.id);
     } catch {
         return [];
     }
@@ -233,10 +240,9 @@ app.post('/api/records/sync', (req, res) => {
     if (incoming.length === 0) {
         return res.status(400).json({ error: 'Tidak ada data untuk disinkronkan' });
     }
-    const isExcluded = (d) => /\b0?1\s*(Agu|Agt)\b|\b31\s*Jul\b/i.test(String(d || ''));
     const records = loadRecords();
     const existingIds = new Set(records.map(r => r && r.id));
-    const fresh = incoming.filter(r => r && r.id && !existingIds.has(r.id) && !isExcluded(r.date));
+    const fresh = incoming.filter(r => r && r.id && !existingIds.has(r.id));
     if (fresh.length > 0) {
         records.unshift(...fresh);
         saveRecords(records);
