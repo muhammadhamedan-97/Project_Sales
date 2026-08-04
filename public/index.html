@@ -15763,10 +15763,54 @@
 
         // Init App
         document.addEventListener('DOMContentLoaded', () => {
-            // Load visit records from localStorage (empty by default)
+            // Load visit records dari localStorage (sementara, sebelum data server masuk)
             visitRecords = JSON.parse(localStorage.getItem('crm_visit_records') || '[]');
             renderTable();
             updateStats();
+
+            // ===== MUAT & RENDER DATA DARI SERVER (PALING AWAL) =====
+            // Dijalankan pertama kali agar data live (termasuk tanggal terbaru) pasti tampil,
+            // meskipun ada error pada fungsi inisialisasi lain di bawah.
+            fetch('/api/records', { cache: 'no-store' })
+                .then(res => res.ok ? res.json() : [])
+                .then(serverRecords => {
+                    if (!Array.isArray(serverRecords)) serverRecords = [];
+                    serverRecords = serverRecords.filter(s => s && s.id);
+                    const serverIds = new Set(serverRecords.map(r => r.id));
+                    const local = JSON.parse(localStorage.getItem('crm_visit_records') || '[]');
+                    const pending = (Array.isArray(local) ? local : []).filter(l => l && l.id && !serverIds.has(l.id));
+                    visitRecords = [...pending, ...serverRecords];
+                    localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
+                    renderTable();
+                    updateStats();
+                    refreshBranchFilterOptions();
+                    if (typeof renderPerformanceDashboard === 'function') renderPerformanceDashboard();
+                    if (typeof renderScorPodium === 'function') renderScorPodium();
+                    if (typeof renderAiTodoListWidget === 'function') renderAiTodoListWidget();
+                    if (pending.length > 0) {
+                        fetch('/api/records/sync', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(pending)
+                        }).then(r => r.ok ? r.json() : null).then(rez => {
+                            if (rez && rez.synced > 0) {
+                                fetch('/api/records', { cache: 'no-store' })
+                                    .then(r2 => r2.ok ? r2.json() : [])
+                                    .then(all => {
+                                        if (Array.isArray(all)) {
+                                            visitRecords = all.filter(s => s && s.id);
+                                            localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
+                                            renderTable();
+                                            updateStats();
+                                            refreshBranchFilterOptions();
+                                        }
+                                    }).catch(() => {});
+                            }
+                        }).catch(() => {});
+                    }
+                })
+                .catch(() => {});
+
             initExcelGrid();
             renderPerformanceDashboard();
             renderScorPodium();
@@ -15786,50 +15830,6 @@
                 }
             }
             initExcelTouchScroll();
-
-            // Sinkron data kunjungan dengan server (records.json):
-            fetch('/api/records', { cache: 'no-store' })
-                .then(res => res.ok ? res.json() : [])
-                .then(serverRecords => {
-                    if (!Array.isArray(serverRecords)) serverRecords = [];
-                    serverRecords = serverRecords.filter(s => s && s.id);
-                    // Gabungkan dengan record lokal yg belum ada di server
-                    // (mis. inputan offline/fallback yg belum tersinkron), anti-duplikat by id.
-                    const serverIds = new Set(serverRecords.map(r => r.id));
-                    const local = JSON.parse(localStorage.getItem('crm_visit_records') || '[]');
-                    const pending = (Array.isArray(local) ? local : []).filter(l => l && l.id && !serverIds.has(l.id));
-                    visitRecords = [...pending, ...serverRecords];
-                    localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
-                    renderTable();
-                    updateStats();
-                    refreshBranchFilterOptions();
-                    renderPerformanceDashboard();
-                    renderScorPodium();
-                    // Dorong record lokal (mis. offline) agar masuk server live
-                    if (pending.length > 0) {
-                        fetch('/api/records/sync', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(pending)
-                        }).then(r => r.ok ? r.json() : null).then(rez => {
-                            if (rez && rez.synced > 0) {
-                                // refresh dari server utk dapat id+urutan resmi
-                                fetch('/api/records', { cache: 'no-store' })
-                                    .then(r2 => r2.ok ? r2.json() : [])
-                                    .then(all => {
-                                        if (Array.isArray(all)) {
-                                            visitRecords = all.filter(s => s && s.id);
-                                            localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
-                                            renderTable();
-                                            updateStats();
-                                            refreshBranchFilterOptions();
-                                        }
-                                    }).catch(() => {});
-                            }
-                        }).catch(() => {});
-                    }
-                })
-                .catch(() => {});
 
             // Sinkron data Excel dengan server (excel.json)
             fetch('/api/excel', { cache: 'no-store' })
