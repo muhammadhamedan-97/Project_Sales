@@ -10,7 +10,7 @@ const EXCEL_FILE = path.join(__dirname, 'data', 'excel.json');
 
 app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
@@ -19,14 +19,21 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-function loadRecords() {
+// Baca file teks & buang BOM (byte order mark) bila ada agar JSON.parse selalu valid.
+function readJsonSafe(filePath, fallback) {
     try {
-        const records = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-        if (!Array.isArray(records)) return [];
-        return records.filter(r => r && r.id);
+        let raw = fs.readFileSync(filePath, 'utf8');
+        raw = raw.replace(/^\uFEFF/, '');
+        return JSON.parse(raw);
     } catch {
-        return [];
+        return fallback;
     }
+}
+
+function loadRecords() {
+    const records = readJsonSafe(DATA_FILE, []);
+    if (!Array.isArray(records)) return [];
+    return records.filter(r => r && r.id);
 }
 
 function saveRecords(records) {
@@ -35,10 +42,8 @@ function saveRecords(records) {
 }
 
 function loadExcelData() {
-    try {
-        const data = JSON.parse(fs.readFileSync(EXCEL_FILE, 'utf8'));
-        return Array.isArray(data) ? data : [];
-    } catch { return []; }
+    const data = readJsonSafe(EXCEL_FILE, []);
+    return Array.isArray(data) ? data : [];
 }
 
 function saveExcelData(data) {
@@ -220,6 +225,63 @@ function runSimulation(payload) {
     return { sentiment, dealScore, urgency, activityType, agentCategory, summary, visualFindings, actionItems };
 }
 
+// ============ AUTO-BERSIHKAN FOTO LAMA (ANTI records.json MEMBENGKAK) ============
+// Hapus data base64 foto untuk kunjungan yang lebih tua dari `daysToKeep` hari.
+// Record, timeline, dan ringkasan AI tetap dipertahankan — hanya blob foto yang dibuang.
+const PHOTO_KEEP_DAYS = parseInt(process.env.PHOTO_KEEP_DAYS || '3', 10);
+
+function parseRecordDate(dateStr) {
+    // Format lokal: "3 Agu 2026, 09.53" | "3 Agu 2026"
+    if (!dateStr) return null;
+    const m = String(dateStr).match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/);
+    if (!m) return null;
+    const months = { 'jan':0,'feb':1,'mar':2,'apr':3,'mei':4,'jun':5,'jul':6,'agu':7,'agt':7,'aug':7,'sep':8,'okt':9,'oct':9,'nov':10,'des':11,'dec':11 };
+    const mon = months[(m[2].slice(0,3).toLowerCase())];
+    if (mon === undefined) return null;
+    const d = new Date(Number(m[3]), mon, Number(m[1]));
+    return isNaN(d) ? null : d;
+}
+
+// Bersihkan foto tua dari semula record; simpan bila ada perubahan.
+// return: jumlah record yang foto-nya dibersihkan
+function purgeOldPhotos() {
+    const records = loadRecords();
+    if (!records.length) return 0;
+    const cutoff = Date.now() - PHOTO_KEEP_DAYS * 24 * 60 * 60 * 1000;
+    let changed = 0;
+    records.forEach(r => {
+        const imgs = r && Array.isArray(r.images) ? r.images : [];
+        if (!imgs.length) return;
+        const dt = parseRecordDate(r.date);
+        if (dt && dt.getTime() < cutoff) {
+            r.images = [];
+            // tanda foto pernah ada, agar UI bisa menampilkan indikasi "foto diarsipkan"
+            r.photosPurgedAt = new Date().toISOString();
+            r.photosPurgedDays = PHOTO_KEEP_DAYS;
+            changed++;
+        }
+    });
+    if (changed > 0) saveRecords(records);
+    return changed;
+}
+
+// Jalankan sekali saat start, lalu tiap interval (default tiap 24 jam).
+setInterval(() => {
+    try {
+        const n = purgeOldPhotos();
+        if (n > 0) console.log(`[AUTO] Foto lama dibersihkan dari ${n} kunjungan (>${PHOTO_KEEP_DAYS} hari).`);
+    } catch (e) {
+        console.error('[AUTO] Gagal purge foto:', e.message);
+    }
+}, parseInt(process.env.PHOTO_PURGE_INTERVAL_MS || (24 * 60 * 60 * 1000), 10));
+
+try {
+    const n = purgeOldPhotos();
+    if (n > 0) console.log(`[AUTO] Startup: foto lama dibersihkan dari ${n} kunjungan (>${PHOTO_KEEP_DAYS} hari).`);
+} catch (e) {
+    console.error('[AUTO] Gagal purge foto saat startup:', e.message);
+}
+
 // ============ API ENDPOINTS ============
 app.get('/api/status', (req, res) => {
     res.json({
@@ -267,9 +329,14 @@ app.post('/api/records', async (req, res) => {
         ai = runSimulation({ branch, sales, clientCompany, clientContactName, resume, images });
     }
 
+    // Gunakan id & tanggal dari klien bila dikirim (konsisten dgn tampilan sales),
+    // agar dedup by id di /api/records/sync tidak membiakkan duplikat.
+    const clientId = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
+    const clientDate = typeof req.body?.date === 'string' ? req.body.date.trim() : '';
+
     const record = {
-        id: 'VISIT-' + Date.now(),
-        date: new Date().toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        id: clientId || ('VISIT-' + Date.now()),
+        date: clientDate || new Date().toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         branch: branch.trim(),
         sales: sales.trim(),
         clientCompany: clientCompany.trim(),
@@ -281,10 +348,28 @@ app.post('/api/records', async (req, res) => {
     };
 
     const records = loadRecords();
+    if (record.id && records.some(r => r && r.id === record.id)) {
+        // Duplikat: jangan tambah dua kali
+        return res.status(200).json(record);
+    }
     records.unshift(record);
     saveRecords(records);
 
     res.status(201).json(record);
+});
+
+// Hapus 1 record kunjungan berdasarkan id
+app.delete('/api/records/:id', (req, res) => {
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'id tidak diberikan' });
+    const records = loadRecords();
+    const before = records.length;
+    const remaining = records.filter(r => r && r.id !== id);
+    if (remaining.length === before) {
+        return res.status(404).json({ error: 'Record tidak ditemukan', deleted: 0 });
+    }
+    saveRecords(remaining);
+    res.json({ deleted: before - remaining.length, total: remaining.length });
 });
 
 // ============ EXCEL DATA SYNC ============

@@ -15792,13 +15792,42 @@
                 .then(res => res.ok ? res.json() : [])
                 .then(serverRecords => {
                     if (!Array.isArray(serverRecords)) serverRecords = [];
-                    visitRecords = serverRecords.filter(s => s && s.id);
+                    serverRecords = serverRecords.filter(s => s && s.id);
+                    // Gabungkan dengan record lokal yg belum ada di server
+                    // (mis. inputan offline/fallback yg belum tersinkron), anti-duplikat by id.
+                    const serverIds = new Set(serverRecords.map(r => r.id));
+                    const local = JSON.parse(localStorage.getItem('crm_visit_records') || '[]');
+                    const pending = (Array.isArray(local) ? local : []).filter(l => l && l.id && !serverIds.has(l.id));
+                    visitRecords = [...pending, ...serverRecords];
                     localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
                     renderTable();
                     updateStats();
                     refreshBranchFilterOptions();
                     renderPerformanceDashboard();
                     renderScorPodium();
+                    // Dorong record lokal (mis. offline) agar masuk server live
+                    if (pending.length > 0) {
+                        fetch('/api/records/sync', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(pending)
+                        }).then(r => r.ok ? r.json() : null).then(rez => {
+                            if (rez && rez.synced > 0) {
+                                // refresh dari server utk dapat id+urutan resmi
+                                fetch('/api/records', { cache: 'no-store' })
+                                    .then(r2 => r2.ok ? r2.json() : [])
+                                    .then(all => {
+                                        if (Array.isArray(all)) {
+                                            visitRecords = all.filter(s => s && s.id);
+                                            localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
+                                            renderTable();
+                                            updateStats();
+                                            refreshBranchFilterOptions();
+                                        }
+                                    }).catch(() => {});
+                            }
+                        }).catch(() => {});
+                    }
                 })
                 .catch(() => {});
 
@@ -15831,6 +15860,14 @@
                         excelGridRows = JSON.parse(JSON.stringify(REAL_EXCEL_INITIAL_ROWS));
                         localStorage.setItem('crm_excel_rows', JSON.stringify(excelGridRows));
                         renderExcelGrid();
+                        // Seeder: dorong data hardcoded ke server agar excel.json & semua device konsisten
+                        if (excelGridRows.length > 0) {
+                            fetch('/api/excel/sync', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(excelGridRows)
+                            }).catch(() => {});
+                        }
                     }
                 })
                 .catch(() => {});
@@ -17896,8 +17933,8 @@
 
             const saveRecord = (aiResult) => {
                 const record = {
-                    id: 'VISIT-' + Date.now(),
-                    date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+                    id: visitId,
+                    date: visitDate,
                     branch,
                     sales,
                     clientCompany,
@@ -17912,8 +17949,14 @@
                 return record;
             };
 
+            // Buat satu id & timestamp di awal, dipakai client & server (konsisten, anti-duplikat)
+            const visitId = 'VISIT-' + Date.now();
+            const visitDate = new Date().toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
             // Kirim ke server: Gemini menganalisa teks + foto asli
             submitToGeminiServer({
+                id: visitId,
+                date: visitDate,
                 branch, sales, clientCompany, clientContactName, clientPhone, resume,
                 images: uploadedImages
             }).then(serverRecord => {
@@ -18257,12 +18300,43 @@
                         <button class="btn-demo" style="padding:5px 9px; display:inline-flex; align-items:center; justify-content:center;" title="Lihat Detail Kunjungan" onclick="openDetailModal(${idx})">
                             <i class="fa-solid fa-eye"></i>
                         </button>
+                        <button class="btn-demo" style="padding:5px 9px; display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:#dc2626; border:1px solid #fecaca; background:#fef2f2;" title="Hapus Kunjungan" onclick="deleteRecord('${rec.id || ''}','table')">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
 
             renderPagination();
+        }
+
+        // ===== HAPUS RECORD KUNJUNGAN (client + server) =====
+        function deleteRecord(id, source) {
+            if (!id) return;
+            const rec = (visitRecords || []).find(r => r && r.id === id);
+            const who = rec ? (rec.clientCompany || rec.branch || id) : id;
+            const ok = confirm('Hapus kunjungan ini?\n\n' + who + '\nData & foto akan dihapus permanen dari website.');
+            if (!ok) return;
+
+            visitRecords = (visitRecords || []).filter(r => r && r.id !== id);
+            localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
+
+            // Refresh tampilan aktif
+            refreshBranchFilterOptions();
+            renderTable();
+            updateStats();
+            if (typeof renderPerformanceDashboard === 'function') renderPerformanceDashboard();
+            if (typeof renderScorPodium === 'function') renderScorPodium();
+            renderAiTodoListWidget();
+
+            // Hapus di server live
+            fetch('/api/records/' + encodeURIComponent(id), { method: 'DELETE', cache: 'no-store' })
+                .then(r => r.json().catch(() => ({})))
+                .then(rez => {
+                    if (rez && rez.deleted > 0 && typeof refreshApiStatusBadge === 'function') refreshApiStatusBadge();
+                })
+                .catch(() => {});
         }
 
         // Render AI Recommended To-Do List Harian Widget (Dinamis dari Data Kunjungan)
@@ -18294,7 +18368,8 @@
                 const isShort = (r.ai && r.ai.dealScore <= 35);
                 
                 return {
-                    id: 'todo-' + idx,
+                    id: r.id || ('todo-' + idx),
+                    _recId: r.id,
                     statusColor: isShort ? '#dc2626' : (r.ai.dealScore >= 70 ? '#059669' : '#d97706'),
                     statusBg: isShort ? '#fef2f2' : (r.ai.dealScore >= 70 ? '#ecfdf5' : '#fffbeb'),
                     statusBorder: isShort ? '#fecaca' : (r.ai.dealScore >= 70 ? '#a7f3d0' : '#fde68a'),
@@ -18326,6 +18401,9 @@
                         ${item.phone ? `<button type="button" style="background: #10b981; color: #ffffff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 3px 8px rgba(16, 185, 129, 0.3);" title="Sapa Agen via WhatsApp" onclick="sendWhatsAppMessage('${item.phone}', '${item.agentName.replace(/'/g, "\\'")}', '${item.agency.replace(/'/g, "\\'")}', '')"><i class="fa-brands fa-whatsapp" style="font-size: 0.95rem;"></i> Sapa WA</button>` : ''}
                         <button type="button" style="background: #4f46e5; color: #ffffff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 3px 8px rgba(79, 70, 229, 0.3);" title="Auto Fill Form Kunjungan" onclick="fillTargetAgentForm('${item.branch}', '${item.agency.replace(/'/g, "\\'")}', '${item.agentName.replace(/'/g, "\\'")}', '${item.phone}')">
                             <i class="fa-solid fa-location-dot"></i> Input Visit Harian
+                        </button>
+                        <button type="button" style="background: #f1f5f9; color: #dc2626; border: 1px solid #fecaca; padding: 7px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;" title="Hapus misi/kunjungan ini" onclick="deleteRecord('${item._recId || ''}','todo')">
+                            <i class="fa-solid fa-trash"></i> Hapus
                         </button>
                     </div>
                 </div>

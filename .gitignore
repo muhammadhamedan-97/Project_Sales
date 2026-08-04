@@ -13,3 +13,6 @@ yarn-error.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Data runtime (records & excel) — JANGAN di-commit agar data produksi tidak tertimpa
+data/
