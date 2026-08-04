@@ -297,7 +297,38 @@ app.get('/api/status', (req, res) => {
 
 app.get('/api/records', (req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.json(loadRecords());
+    const records = loadRecords();
+    // Mode ringan: tanpa blob foto (agar halaman cepat dimuat & HP tidak kosong).
+    // Foto hanya diambil per-record lewat GET /api/records/:id saat klik detail.
+    if (req.query.light === '1') {
+        const light = records.map(r => ({
+            id: r.id,
+            date: r.date,
+            branch: r.branch,
+            sales: r.sales,
+            clientCompany: r.clientCompany,
+            clientContactName: r.clientContactName,
+            clientPhone: r.clientPhone,
+            resume: r.resume,
+            hasPhoto: Array.isArray(r.images) && r.images.length > 0,
+            photoCount: Array.isArray(r.images) ? r.images.length : 0,
+            photosPurgedAt: r.photosPurgedAt,
+            ai: r.ai
+        }));
+        return res.json(light);
+    }
+    res.json(records);
+});
+
+// Ambil 1 record lengkap (termasuk foto) berdasarkan id — utk modal detail
+app.get('/api/records/:id', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'id tidak diberikan' });
+    const records = loadRecords();
+    const found = records.find(r => r && r.id === id);
+    if (!found) return res.status(404).json({ error: 'Record tidak ditemukan' });
+    res.json(found);
 });
 
 // Sinkronisasi data kunjungan dari localStorage perangkat (PC/HP) ke server.

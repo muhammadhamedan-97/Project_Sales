@@ -15773,9 +15773,10 @@
             updateStats();
 
             // ===== MUAT & RENDER DATA DARI SERVER (PALING AWAL) =====
-            // Dijalankan pertama kali agar data live (termasuk tanggal terbaru) pasti tampil,
-            // meskipun ada error pada fungsi inisialisasi lain di bawah.
-            fetch('/api/records', { cache: 'no-store' })
+            // Dijalankan pertama kali agar data live (termasuk tanggal terbaru) pasti tampil.
+            // Pakai mode ?light=1 (tanpa blob foto) agar halaman cepat & tidak kosong di HP.
+            // Foto diambil per-record via GET /api/records/:id saat klik detail.
+            fetch('/api/records?light=1', { cache: 'no-store' })
                 .then(res => res.ok ? res.json() : [])
                 .then(serverRecords => {
                     if (!Array.isArray(serverRecords)) serverRecords = [];
@@ -15791,27 +15792,6 @@
                     if (typeof renderPerformanceDashboard === 'function') renderPerformanceDashboard();
                     if (typeof renderScorPodium === 'function') renderScorPodium();
                     if (typeof renderAiTodoListWidget === 'function') renderAiTodoListWidget();
-                    if (pending.length > 0) {
-                        fetch('/api/records/sync', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(pending)
-                        }).then(r => r.ok ? r.json() : null).then(rez => {
-                            if (rez && rez.synced > 0) {
-                                fetch('/api/records', { cache: 'no-store' })
-                                    .then(r2 => r2.ok ? r2.json() : [])
-                                    .then(all => {
-                                        if (Array.isArray(all)) {
-                                            visitRecords = all.filter(s => s && s.id);
-                                            localStorage.setItem('crm_visit_records', JSON.stringify(visitRecords));
-                                            renderTable();
-                                            updateStats();
-                                            refreshBranchFilterOptions();
-                                        }
-                                    }).catch(() => {});
-                            }
-                        }).catch(() => {});
-                    }
                 })
                 .catch(() => {});
 
@@ -18280,7 +18260,9 @@ const TODO_PAGE_SIZE = 10;
                 const tr = document.createElement('tr');
                 
                 const sentClass = rec.ai.sentiment === 'Positif' ? 'sentiment-positive' : (rec.ai.sentiment === 'Netral' ? 'sentiment-neutral' : 'sentiment-negative');
-                const imgThumb = rec.images[0] ? rec.images[0].url : '';
+                // Rekam light tidak membawa blob foto; gunakan hasPhoto sebagai indikator.
+                const hasPhoto = (rec.hasPhoto === true) || (Array.isArray(rec.images) && rec.images.length > 0);
+                const imgThumb = (!rec.hasPhoto && Array.isArray(rec.images)) ? (rec.images[0] ? rec.images[0].url : '') : '';
                 const actBadgeClass = rec.ai.activityType === 'Maintenance Rutin' ? 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;' : 'background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;';
 
                 tr.innerHTML = `
@@ -18297,7 +18279,7 @@ const TODO_PAGE_SIZE = 10;
                         ${rec.clientPhone && rec.clientPhone !== '-' ? `<br><button type="button" style="margin-top:4px; background:#10b981; color:#ffffff; border:none; padding:4px 9px; border-radius:6px; font-size:0.73rem; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow: 0 2px 5px rgba(16, 185, 129, 0.3);" title="Kirim Pesan WhatsApp Otomatis ke Agen" onclick="sendWhatsAppMessage('${rec.clientPhone}', '${(rec.clientContactName||'').replace(/'/g, "\\'")}', '${(rec.clientCompany||'').replace(/'/g, "\\'")}', '${(rec.sales||'').replace(/'/g, "\\'")}')"><i class="fa-brands fa-whatsapp" style="font-size:0.85rem;"></i> Sapa WA</button>` : ''}
                     </td>
                     <td style="text-align:center;">
-                        ${imgThumb ? `<img src="${imgThumb}" style="width:46px; height:46px; border-radius:6px; object-fit:cover; cursor:zoom-in; border:1px solid #e2e8f0; transition:transform 0.15s;" title="Klik untuk perbesar foto" onclick="openImageModal(this.src)">` : '-'}
+                        ${imgThumb ? `<img src="${imgThumb}" style="width:46px; height:46px; border-radius:6px; object-fit:cover; cursor:zoom-in; border:1px solid #e2e8f0; transition:transform 0.15s;" title="Klik untuk perbesar foto" onclick="openImageModal(this.src)">` : (hasPhoto ? '<i class="fa-solid fa-camera" style="color:#94a3b8; font-size:1.1rem;" title="Ada foto (klik detail untuk melihat)"></i>' : '-')}
                     </td>
                     <td><span class="badge-sentiment ${sentClass}">${rec.ai.sentiment}</span></td>
                     <td><strong style="color:#4f46e5;">${rec.ai.dealScore}%</strong></td>
@@ -18699,12 +18681,24 @@ const TODO_PAGE_SIZE = 10;
         }
 
         // Detail View Modal
-        function openDetailModal(index) {
-            const rec = visitRecords[index];
+        function openDetailModal(index, givenRec) {
+            const rec = givenRec || visitRecords[index];
             if (!rec) return;
 
-            document.getElementById('detTitle').innerText = `Detail Kunjungan: ${rec.branch}`;
-            
+            document.getElementById('detTitle').innerText = `Detail Kunjungan: ${rec.branch || ''}`;
+
+            // Jika record ringan (tanpa foto), ambil data lengkap dari server saat detail dibuka
+            const hasImagesArray = Array.isArray(rec.images);
+            if (!hasImagesArray && rec.id) {
+                fetch('/api/records/' + encodeURIComponent(rec.id), { cache: 'no-store' })
+                    .then(res => res.ok ? res.json() : null)
+                    .then(full => {
+                        if (full && full.id) {
+                            openDetailModal(index, full);
+                        }
+                    }).catch(() => {});
+            }
+
             const content = document.getElementById('detContent');
             content.innerHTML = `
                 <div style="display:flex; justify-content:space-between; font-size:0.88rem; color:var(--text-muted); border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
@@ -18728,7 +18722,7 @@ const TODO_PAGE_SIZE = 10;
                 <div>
                     <h4 style="font-size:0.9rem; color:#1e293b; margin-bottom:8px;">Foto Bukti Kunjungan:</h4>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        ${rec.images.map(img => `<img src="${img.url}" style="width:120px; height:90px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; cursor:zoom-in; transition:transform 0.15s;" title="Klik untuk perbesar" onclick="openImageModal(this.src)">`).join('')}
+                        ${Array.isArray(rec.images) && rec.images.length ? rec.images.map(img => `<img src="${img.url}" style="width:120px; height:90px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; cursor:zoom-in; transition:transform 0.15s;" title="Klik untuk perbesar" onclick="openImageModal(this.src)">`).join('') : '<span style="color:#94a3b8; font-style:italic;">Memuat foto... atau tidak ada foto.</span>'}
                     </div>
                 </div>
 
