@@ -1352,6 +1352,10 @@
                 <div id="aiTodoListContainer" style="display: flex; flex-direction: column; gap: 12px;">
                     <!-- Dynamic AI To-Do List Items -->
                 </div>
+                <div id="aiTodoPagination" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+                    <div id="aiTodoPageInfo" class="page-info-text"></div>
+                    <div id="aiTodoPageButtons" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;"></div>
+                </div>
             </div>
 
         </div>
@@ -18195,8 +18199,10 @@
             }
         }
         // ===== Pagination: Dashboard Riwayat (10 baris per halaman) =====
-        let crmPage = 1;
-        const CRM_PAGE_SIZE = 10;
+let crmPage = 1;
+const CRM_PAGE_SIZE = 10;
+let todoPage = 1;
+const TODO_PAGE_SIZE = 10;
         let filteredRecords = [];
 
         function getFilteredRecords() {
@@ -18383,7 +18389,13 @@
                 };
             });
 
-            container.innerHTML = todoList.map((item) => `
+            // Pagination: hanya tampilkan 10 list per halaman
+            const totalPages = Math.max(1, Math.ceil(todoList.length / TODO_PAGE_SIZE));
+            if (todoPage > totalPages) todoPage = totalPages;
+            if (todoPage < 1) todoPage = 1;
+            const pageItems = todoList.slice((todoPage - 1) * TODO_PAGE_SIZE, todoPage * TODO_PAGE_SIZE);
+
+            container.innerHTML = pageItems.map((item) => `
                 <div style="background: ${item.statusBg}; border: 1px solid ${item.statusBorder}; border-left: 5px solid ${item.statusColor}; border-radius: 12px; padding: 14px 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; transition: transform 0.2s;">
                     <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 250px;">
                         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -18408,6 +18420,33 @@
                     </div>
                 </div>
             `).join('');
+
+            renderTodoPagination(todoList.length, totalPages);
+        }
+
+        // Pagination Misi Harian
+        function renderTodoPagination(totalItems, totalPages) {
+            const info = document.getElementById('aiTodoPageInfo');
+            const box = document.getElementById('aiTodoPageButtons');
+            if (!info || !box) return;
+            if (totalPages <= 1) { info.textContent = ''; box.innerHTML = ''; return; }
+            const start = (todoPage - 1) * TODO_PAGE_SIZE + 1;
+            const end = Math.min(todoPage * TODO_PAGE_SIZE, totalItems);
+            info.textContent = `Misi ${start}-${end} dari ${totalItems} misi | Halaman ${todoPage}/${totalPages}`;
+            let html = '';
+            let from = Math.max(1, todoPage - 2);
+            let to = Math.min(totalPages, from + 4);
+            from = Math.max(1, to - 4);
+            for (let p = from; p <= to; p++) {
+                html += `<button class="page-btn${p === todoPage ? ' active' : ''}" onclick="todoGoToPage(${p})">${p}</button>`;
+            }
+            box.innerHTML = html;
+        }
+
+        function todoGoToPage(p) {
+            const totalPages = Math.max(1, Math.ceil((visitRecords || []).length / TODO_PAGE_SIZE));
+            todoPage = Math.min(Math.max(1, p), totalPages);
+            renderAiTodoListWidget();
         }
 
         // Fill Form Kunjungan Automatically for Selected Agent Task
