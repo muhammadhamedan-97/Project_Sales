@@ -8,6 +8,10 @@ const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'records.json');
 const EXCEL_FILE = path.join(__dirname, 'data', 'excel.json');
 
+// Nonaktifkan ETag agar API tidak pernah mengembalikan 304/not-modified
+// yang membuat browser memakai data lama. Data live harus selalu fresh.
+app.disable('etag');
+
 app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
@@ -292,6 +296,7 @@ app.get('/api/status', (req, res) => {
 });
 
 app.get('/api/records', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     res.json(loadRecords());
 });
 
@@ -376,6 +381,7 @@ app.delete('/api/records/:id', (req, res) => {
 app.get('/api/excel', (req, res) => {
     const data = loadExcelData();
     console.log(`[EXCEL] GET — mengirim ${data.length} baris`);
+    res.set('Cache-Control', 'no-store');
     res.json(data);
 });
 
